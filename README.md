@@ -1,6 +1,6 @@
 # CloudSentinel
 
-CloudSentinel is a read-only AWS resource inventory and utilization scanner. It discovers resources across enabled AWS Regions, identifies a small set of potentially idle resources, and prints a concise summary for review.
+CloudSentinel is a read-only AWS resource inventory, utilization, and account-cost scanner. It discovers resources across enabled AWS Regions, identifies a small set of potentially idle resources, retrieves account-level AWS costs, and prints a concise summary for review.
 
 It is intended as a foundation for an AWS FinOps workflow: first discover what exists, then measure usage, and finally decide what—if anything—should be changed. CloudSentinel never modifies AWS resources.
 
@@ -41,6 +41,14 @@ CloudSentinel classifies each discovered resource as `ACTIVE`, `LOW ACTIVITY`, o
 
 These are review signals, not deletion decisions. A stopped instance or an infrequently invoked function can still be intentional and valuable.
 
+## Cost Explorer
+
+When Cost Explorer is enabled and the caller has access, CloudSentinel retrieves month-to-date `NetUnblendedCost`, grouped by AWS service and usage type, plus a daily cost trend. It also requests a best-effort daily forecast for the remainder of the current month; unavailable forecast data is reported separately and does not hide cost results. Current-period values can be marked as estimated by AWS; credits, refunds, and zero or negative values are preserved rather than treated as waste.
+
+Cost data is account-level only. CloudSentinel does not attribute a service cost to a specific resource or calculate savings estimates at this stage.
+
+Each scan makes at least five Cost Explorer API requests (month-to-date total, service and usage-type groups, daily trend, and forecast); pagination can add requests. AWS currently charges $0.01 per Cost Explorer API request against a primary billing view, so the baseline Cost Explorer query cost is approximately $0.05 per scan before pagination. Schedule scans deliberately and add caching before serving this data through a dashboard.
+
 ## Architecture
 
 ```text
@@ -63,8 +71,8 @@ CloudSentinel uses the standard AWS credential provider chain. This includes a c
 ## Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/cloudsentinel.git
-cd cloudsentinel
+git clone https://github.com/Copubah/cloudsentinel-aws-finops.git
+cd cloudsentinel-aws-finops
 
 python3 -m venv .venv
 source .venv/bin/activate
@@ -151,6 +159,8 @@ s3:ListAllMyBuckets
 s3:GetBucketLocation
 cloudfront:ListDistributions
 cloudwatch:GetMetricStatistics
+ce:GetCostAndUsage
+ce:GetCostForecast
 ```
 
 Some actions may need `Resource: "*"` because the corresponding AWS APIs do not support resource-level permissions. Scope access further where AWS supports it, and validate the policy against the services and Regions you intend to scan.
@@ -186,4 +196,4 @@ cloudsentinel/
 
 ## License
 
-No license file is currently included in this repository. Add one before publishing or distributing the project under a specific license.
+This project is licensed under the [MIT License](LICENSE).

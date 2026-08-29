@@ -1,6 +1,16 @@
 import boto3
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import sys
 from botocore.exceptions import ClientError
+
+
+BACKEND_DIRECTORY = Path(__file__).resolve().parents[2]
+
+if str(BACKEND_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIRECTORY))
+
+from cost.explorer import get_cost_summary
 
 
 # ============================================================
@@ -1275,6 +1285,8 @@ def handler(
         resources
     )
 
+    cost_summary = get_cost_summary()
+
     return {
 
         "statusCode":
@@ -1285,6 +1297,9 @@ def handler(
 
         "summary":
             summary,
+
+        "cost":
+            cost_summary,
 
         "resources":
             resources
@@ -1340,6 +1355,32 @@ if __name__ == "__main__":
         print(
             f"  {resource_type:<30}"
             f"{count}"
+        )
+
+
+    cost = result["cost"]
+
+    print()
+    print("Cost Summary:")
+
+    if cost["status"] == "available":
+
+        month_to_date = cost["month_to_date"]
+
+        print(
+            f"  Month to date: "
+            f"{month_to_date['currency']} "
+            f"{month_to_date['amount']:.2f}"
+        )
+
+        if month_to_date["estimated"]:
+            print("  Note: current-period costs are estimated")
+
+    else:
+
+        print(
+            "  Unavailable: "
+            f"{cost['error']}"
         )
 
 
