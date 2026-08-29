@@ -1,468 +1,111 @@
-# CloudSentinel AWS FinOps
-CloudSentinel is an AWS FinOps platform that discovers cloud resources, analyzes their utilization and costs, identifies idle or low-activity resources, and provides actionable cost-optimization recommendations.
+# CloudSentinel
 
-The project is designed around a real-world cloud operations workflow:
+CloudSentinel is a read-only AWS resource inventory and utilization scanner. It discovers resources across enabled AWS Regions, identifies a small set of potentially idle resources, and prints a concise summary for review.
 
-AWS Account
-     │
-     ▼
-Resource Discovery
-     │
-     ├── EC2
-     ├── EBS
-     ├── Elastic IP
-     ├── NAT Gateway
-     ├── RDS
-     ├── Lambda
-     ├── DynamoDB
-     ├── S3
-     └── CloudFront
-          │
-          ▼
-   CloudWatch Metrics
-          │
-          ▼
-    AWS Cost Explorer
-          │
-          ▼
-    FinOps Analysis
-          │
-     ┌────┴────┐
-     ▼         ▼
-   Idle     Low Activity
- Resources   Resources
-     │         │
-     └────┬────┘
-          ▼
- Cost Optimization
- Recommendations
-          │
-          ▼
-    FinOps Agent
-          │
-          ▼
-     Web Dashboard
+It is intended as a foundation for an AWS FinOps workflow: first discover what exists, then measure usage, and finally decide what—if anything—should be changed. CloudSentinel never modifies AWS resources.
 
+## What it scans
 
-## Project Goals
+Regional services are scanned in every enabled or opt-in-not-required AWS Region:
 
-CloudSentinel aims to answer four important questions:
+| Service | Collected details |
+| --- | --- |
+| Amazon EC2 | instance ID, name, state, type, and launch time |
+| Amazon EBS | volume ID, state, size, type, attachment, and creation time |
+| Elastic IP | allocation ID, public IP, and association status |
+| NAT Gateway | gateway ID, state, VPC, and subnet |
+| Amazon RDS | instance ID, status, engine, instance class, and allocated storage |
+| AWS Lambda | ARN, runtime, memory, last-modified time, and 30-day invocation count |
+| Amazon DynamoDB | table ARN, name, status, and item count |
 
-1. What AWS resources are running?**
-2. Which resources are idle or underutilized?
-3. What is actually costing money?
-4. What can be optimized to reduce AWS spending?
+Global services are scanned once:
 
-Unlike a basic AWS inventory script, CloudSentinel combines resource discovery, utilization data, and billing information to provide FinOps recommendations.
+| Service | Collected details |
+| --- | --- |
+| Amazon S3 | bucket name, creation time, and bucket Region |
+| Amazon CloudFront | distribution ID, status, enabled state, and domain |
 
----
+## Current detection rules
 
-# Features
+CloudSentinel classifies each discovered resource as `ACTIVE`, `LOW ACTIVITY`, or `IDLE` using the following rules.
 
-## AWS Resource Discovery
+| Resource | Classification rule |
+| --- | --- |
+| EBS volume | `IDLE` when it has no attached instance |
+| Elastic IP | `IDLE` when it is unassociated |
+| EC2 instance | `IDLE` when its state is `stopped` |
+| RDS instance | `IDLE` when its status is `stopped` |
+| NAT Gateway | `IDLE` when its state is `failed` |
+| Lambda function | `IDLE` with zero invocations in the previous 30 days; `LOW ACTIVITY` with fewer than 10 |
+| All other discovered resources | `ACTIVE` unless a rule above applies |
 
-CloudSentinel scans enabled AWS regions and identifies resources including:
+These are review signals, not deletion decisions. A stopped instance or an infrequently invoked function can still be intentional and valuable.
 
-* EC2
-* EBS
-* Elastic IPs
-* NAT Gateways
-* RDS
-* Lambda
-* DynamoDB
-* S3
-* CloudFront
-
-Example:
-Total resources: 5
-
-Resource Summary:
-  Lambda                        1
-  DynamoDB                      1
-  S3                            2
-  CloudFront                    1
-  idle_resources                0
-  low_activity_resources        1
-  active_resources              4
-
-## Multi-Region Scanning
-The scanner automatically discovers enabled AWS regions rather than requiring regions to be manually configured.
-
-Example:
-Scanning region: ap-northeast-1
-Scanning region: ap-south-1
-Scanning region: eu-central-1
-Scanning region: eu-west-1
-Scanning region: us-east-1
-Scanning region: us-west-2
-```
-
-Global services such as S3 and CloudFront are scanned separately.
-
----
-
-# Utilization Analysis
-
-CloudSentinel uses Amazon CloudWatch metrics to determine whether resources are being used.
-
-For Lambda, the platform currently analyzes invocation activity over the previous 30 days.
-
-Example:
-Lambda
-Invocations (30d): 6.0
-Classification: LOW ACTIVITY
-
-
-Resources can be classified as:
-
-ACTIVE
-LOW ACTIVITY
-IDLE
-
----
-
-# Idle Resource Detection
-
-CloudSentinel identifies resources that may be generating unnecessary costs.
-
-Examples include:
-
-### EBS
-
-EBS volume
-      ↓
-No attached EC2 instance
-      ↓
-IDLE
-
-
-### Elastic IP
-
-Elastic IP
-      ↓
-Not associated
-      ↓
-IDLE
-
-
-### EC2
-
-EC2 instance
-      ↓
-Stopped
-      ↓
-IDLE
-
-
-### Lambda
-
-Lambda
-      ↓
-0 invocations / 30 days
-      ↓
-IDLE
-
-
-Low-activity resources are also flagged for review.
-
----
-
-# AWS Cost Explorer
-
-CloudSentinel integrates with AWS Cost Explorer to retrieve:
-
-* Current monthly AWS cost
-* Cost by AWS service
-* Usage-type costs
-* Cost drivers
-
-Example:
-
-FINOPS COST
-
-Current month:
-$0.08 USD
-
-COST BY SERVICE:
-
-AWS Lambda
-Amazon S3
-Amazon DynamoDB
-Amazon CloudFront
-AmazonCloudWatch
-AWS Key Management Service
-
-
-This allows CloudSentinel to combine:
-
-Resource
-   +
-Utilization
-   +
-Cost
-
-
-instead of looking at each independently.
-
----
-
-# FinOps Recommendation Engine
-
-The next stage of the project converts raw AWS data into recommendations.
-
-Example:
-Lambda Function
-6 invocations / 30 days
-        │
-        ▼
-LOW ACTIVITY
-        │
-        ▼
-Review function necessity
-        │
-        ▼
-Potential cost optimization
-
-
-Future recommendations will include:
-
-* Delete unused EBS volumes
-* Release unassociated Elastic IPs
-* Review stopped EC2 instances
-* Review inactive Lambda functions
-* Review idle RDS databases
-* Review unnecessary NAT Gateways
-* Identify S3 storage optimization opportunities
-* Identify CloudFront optimization opportunities
-* Identify DynamoDB capacity inefficiencies
-
----
-
-# AWS FinOps Agent
-
-CloudSentinel will integrate an AWS FinOps Agent to provide higher-level analysis of the collected cloud data.
-
-The agent will be able to reason about:
-Resource inventory
-       +
-CloudWatch metrics
-       +
-Cost Explorer
-       +
-Resource metadata
-       ↓
-FinOps Agent
-       ↓
-Prioritized recommendations
-
-
-Example:
-
-Recommendation
-
-Resource:
-s3-storage-optimizer-dev-scanner
-
-Activity:
-6 Lambda invocations in 30 days
-
-Finding:
-Low activity
-
-Priority:
-Medium
-
-Action:
-Review whether this function is still required.
-
-Estimated savings:
-Calculated using AWS cost data.
-
----
-
-# Architecture
-
-                  ┌──────────────────────┐
-                  │      AWS Account     │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │ Resource Discovery   │
-                  └──────────┬───────────┘
-                             │
-          ┌──────────────────┼──────────────────┐
-          ▼                  ▼                  ▼
-       EC2/EBS          Lambda/RDS        S3/CloudFront
-          │                  │                  │
-          └──────────────────┼──────────────────┘
-                             ▼
-                  ┌──────────────────────┐
-                  │    CloudWatch        │
-                  │    Utilization       │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │   Cost Explorer      │
-                  │   Billing Analysis   │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │   FinOps Engine      │
-                  └──────────┬───────────┘
-                             │
-                ┌────────────┴────────────┐
-                ▼                         ▼
-        Idle Detection            Cost Analysis
-                │                         │
-                └────────────┬────────────┘
-                             ▼
-                  ┌──────────────────────┐
-                  │ FinOps Agent         │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │ Web Dashboard        │
-                  └──────────────────────┘
-
----
-
-# Project Phases
-
-| Phase | Component                          | Status      |
-| ----- | ---------------------------------- | ----------- |
-| 1     | Project setup                      | Complete    |
-| 2     | AWS authentication                 | Complete    |
-| 3     | Resource discovery                 | Complete    |
-| 4     | S3 optimization analysis           | Complete    |
-| 5     | DynamoDB persistence               | Complete    |
-| 6     | Lambda scanner                     | Complete    |
-| 7     | CloudFront integration             | Complete    |
-| 8     | Multi-region scanning              | Complete    |
-| 9     | Resource inventory                 | Complete    |
-| 10    | Basic idle detection               | Complete    |
-| 11    | CloudWatch utilization             | Complete    |
-| 12    | Cost Explorer integration          | In progress |
-| 13    | FinOps recommendation engine       | Planned     |
-| 14    | AWS FinOps Agent                   | Planned     |
-| 15    | Web dashboard, alerts & deployment | Planned     |
-
----
-
-# Technology Stack
-
-### Cloud
-
-* AWS
-* AWS Lambda
-* Amazon S3
-* Amazon DynamoDB
-* Amazon CloudFront
-* Amazon CloudWatch
-* AWS Cost Explorer
-* AWS IAM
-
-### Development
-
-* Python
-* Bash
-* AWS CLI
-* Boto3
-* Git
-* GitHub
-
-### Planned
-
-* FinOps Agent
-* React dashboard
-* API layer
-* Automated alerts
-* Scheduled scanning
-* Cost forecasting
-
----
-
-# Repository Structure
+## Architecture
 
 ```text
-cloudsentinel/
-│
-├── backend/
-│   └── lambda/
-│       └── scanner/
-│           └── handler.py
-│
-├── frontend/
-│
-├── infrastructure/
-│
-├── tests/
-│
-├── scripts/
-│
-├── docs/
-│
-├── .gitignore
-├── README.md
-└── requirements.txt
-
-
----
-
-# Installation
-
-## Clone the repository
-
-git clone https://github.com/YOUR_USERNAME/cloudsentinel-aws-finops.git
-
-cd cloudsentinel-aws-finops
-
-
-## Install dependencies
-pip install -r requirements.txt
-
-
-## Configure AWS CLI
-
-aws configure
-
-Verify authentication:
-
-
-aws sts get-caller-identity
-
-
-Example:
-
-```json
-{
-    "Account": "YOUR_AWS_ACCOUNT_ID",
-    "Arn": "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:user/YOUR_USER"
-}
+AWS account
+  └─ enabled Regions
+       └─ resource discovery ──┐
+  └─ S3 and CloudFront ────────┤
+                                ├─ idle / activity analysis ──> summary and resource list
+CloudWatch Lambda invocations ──┘
 ```
 
----
+## Requirements
 
-# Run the Scanner
+- Python 3.9 or later
+- An AWS account and credentials available to the AWS SDK for Python (Boto3)
+- Permission to list the relevant resources and read Lambda CloudWatch metrics
 
+CloudSentinel uses the standard AWS credential provider chain. This includes a configured AWS CLI profile, environment variables, IAM roles, or other Boto3-supported credential sources.
+
+## Install
+
+```bash
+git clone https://github.com/YOUR_USERNAME/cloudsentinel.git
+cd cloudsentinel
+
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r backend/requirements.txt
+```
+
+Configure credentials if you are developing locally:
+
+```bash
+aws configure
+aws sts get-caller-identity
+```
+
+Do not commit credentials, access keys, or local AWS configuration files to the repository.
+
+## Run locally
+
+```bash
 python3 backend/lambda/scanner/handler.py
+```
 
-CloudSentinel will:
+The scan can take time in accounts with many enabled Regions or Lambda functions because the scanner queries each supported regional service and reads a CloudWatch metric for every Lambda function. AWS API errors are printed and the scanner continues with the remaining checks where possible.
 
-1. Discover enabled AWS regions.
-2. Scan regional resources.
-3. Scan global resources.
-4. Query CloudWatch utilization metrics.
-5. Classify resources.
-6. Query AWS Cost Explorer.
-7. Generate a FinOps summary.
+Example output:
 
----
+```text
+Enabled regions found: 2
 
-# Example Output
+Scanning region: us-east-1
+  EC2
+  EBS
+  Elastic IP
+  NAT Gateway
+  RDS
+  Lambda
+  DynamoDB
+
+Scanning global services
+  S3
+  CloudFront
 
 ================================================================================
                   CloudSentinel
@@ -473,176 +116,74 @@ Total resources: 5
 
 Resource Summary:
   Lambda                        1
-  DynamoDB                      1
   S3                            2
   CloudFront                    1
   idle_resources                0
   low_activity_resources        1
   active_resources              4
-
-Resources:
-
-  Lambda
-      Region: us-east-1
-      Invocations (30d): 6
-      Classification: LOW ACTIVITY
-
-  DynamoDB
-      Region: us-east-1
-      Classification: ACTIVE
-
-  S3
-      Region: us-east-1
-      Classification: ACTIVE
-
-  S3
-      Region: us-east-1
-      Classification: ACTIVE
-
-  CloudFront
-      Region: global
-      Classification: ACTIVE
-
-
----
-
-# Security
-
-CloudSentinel is designed to operate in **read-only mode** during scanning.
-
-The scanner does not automatically:
-
-* Delete resources
-* Stop EC2 instances
-* Delete databases
-* Release Elastic IPs
-* Modify S3 buckets
-* Modify IAM permissions
-
-Recommendations are generated for human review before any remediation action is performed.
-
-AWS credentials should never be committed to the repository.
-
-Add sensitive files to `.gitignore`:
-
-.env
-*.pem
-*.key
-.aws/
-credentials
 ```
 
----
+## Run as an AWS Lambda function
 
-# IAM Permissions
-
-The scanner requires permissions to inspect AWS resources and retrieve monitoring and billing information.
-
-Required permissions will vary depending on the services enabled in the AWS account.
-
-Core permissions include read-only access to:
-
-EC2
-EBS
-RDS
-Lambda
-DynamoDB
-S3
-CloudFront
-CloudWatch
-Cost Explorer
-```
-
-For production deployments, use a dedicated IAM role with the minimum permissions required.
-
----
-
-# FinOps Philosophy
-
-CloudSentinel follows a simple principle:
-
-> **Don't optimize what you haven't measured.**
-
-The platform therefore follows:
+The scanner exposes a standard Python Lambda handler:
 
 ```text
-Discover
-   ↓
-Measure
-   ↓
-Analyze
-   ↓
-Prioritize
-   ↓
-Recommend
-   ↓
-Remediate
-   ↓
-Measure Again
+handler.handler
 ```
 
-This makes the project useful not only as an AWS monitoring tool, but as a practical demonstration of FinOps and Cloud Operations.
+It returns a JSON-serializable object with `statusCode`, `total_resources`, `summary`, and `resources`. Package `boto3` with the function only when your target Lambda runtime does not already provide a compatible version.
 
----
+## IAM permissions
 
-# Roadmap
+Use a dedicated least-privilege IAM role. The scanner needs read access equivalent to these actions:
 
-### Current
+```text
+ec2:DescribeRegions
+ec2:DescribeInstances
+ec2:DescribeVolumes
+ec2:DescribeAddresses
+ec2:DescribeNatGateways
+rds:DescribeDBInstances
+lambda:ListFunctions
+dynamodb:ListTables
+dynamodb:DescribeTable
+s3:ListAllMyBuckets
+s3:GetBucketLocation
+cloudfront:ListDistributions
+cloudwatch:GetMetricStatistics
+```
 
-* [x] AWS resource discovery
-* [x] Multi-region scanning
-* [x] Lambda utilization analysis
-* [x] Idle resource detection
-* [x] Cost Explorer access
+Some actions may need `Resource: "*"` because the corresponding AWS APIs do not support resource-level permissions. Scope access further where AWS supports it, and validate the policy against the services and Regions you intend to scan.
 
-### Next
+## Security and operational notes
 
-* [ ] Cost-to-resource mapping
-* [ ] Savings estimation
-* [ ] FinOps recommendation engine
-* [ ] S3 cost optimization
-* [ ] DynamoDB utilization analysis
-* [ ] CloudFront analysis
-* [ ] RDS utilization analysis
-* [ ] EC2 utilization analysis
+- The scanner only calls read/list/describe APIs and CloudWatch metric reads. It does not delete, stop, terminate, release, or reconfigure resources.
+- Review every `IDLE` or `LOW ACTIVITY` result before remediation. The tool has no cost calculation or automated remediation capability.
+- The scanner discovers enabled AWS Regions from EC2. If that call is denied, regional discovery returns no Regions, though global S3 and CloudFront checks still run.
+- S3 and CloudFront are treated as global discovery operations; S3 bucket locations are reported individually.
 
-### Future
+## Repository layout
 
-* [ ] AWS FinOps Agent integration
-* [ ] Natural-language FinOps queries
-* [ ] React dashboard
-* [ ] Cost trend visualization
-* [ ] Automated scheduled scans
-* [ ] Email/Slack alerts
-* [ ] Automated remediation with approval
-* [ ] Monthly FinOps reports
+```text
+cloudsentinel/
+├── backend/
+│   ├── requirements.txt
+│   └── lambda/
+│       └── scanner/
+│           └── handler.py       # scanner and Lambda entry point
+├── infrastructure/              # reserved for infrastructure code
+├── scripts/                     # reserved for helper scripts
+├── tests/                       # reserved for tests
+└── README.md
+```
 
----
+## Roadmap
 
-# Why CloudSentinel?
+- Cost Explorer integration and cost-to-resource mapping
+- Savings estimates and prioritized recommendations
+- Additional utilization analysis for EC2, RDS, DynamoDB, S3, CloudFront, and NAT Gateways
+- Scheduled scans, persistence, alerts, and a web dashboard
 
-CloudSentinel is designed as a practical cloud engineering project rather than a simple AWS inventory script.
+## License
 
-It demonstrates:
-
-* AWS architecture
-* Cloud Operations
-* FinOps
-* Infrastructure monitoring
-* Python/Boto3
-* CloudWatch
-* Cost Explorer
-* Serverless architecture
-* Multi-region AWS operations
-* Cloud security
-* Automation
-* Data analysis
-* AI-assisted cloud optimization
-
-The long-term goal is to turn CloudSentinel into a lightweight **AWS FinOps and Cloud Operations platform** capable of continuously identifying waste and explaining where optimization opportunities exist.
-
----
-
-# License
-
-This project is licensed under the MIT License.
+No license file is currently included in this repository. Add one before publishing or distributing the project under a specific license.
